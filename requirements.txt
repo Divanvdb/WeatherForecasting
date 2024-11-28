@@ -1,0 +1,10 @@
+xarray
+numpy
+pandas
+scikit-learn
+matplotlib
+cartopy
+torch
+ipython
+netCDF4
+h5netcdf

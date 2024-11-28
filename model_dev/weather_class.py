@@ -18,11 +18,14 @@ import torch
 from typing import Tuple
 
 class WeatherData(Dataset):
-    def __init__(self, dataset: xr.Dataset, window_size: int = 24, steps: int = 3, auto: bool = True, coarsen: int = 1, use_forcings: bool = True, data_split: str = 'train'):
+    def __init__(self, dataset: xr.Dataset, window_size: int = 24, steps: int = 3, 
+                        auto: bool = True, coarsen: int = 1, use_forcings: bool = True, 
+                        data_split: str = 'train', lightning: bool = False, only_wspd: bool = False) -> None:
         
         self.dataset = dataset
         self.window_size = window_size
         self.steps = steps
+        self.only_wspd = only_wspd
 
         self.min_value = self.dataset.wind_speed.min().item()
         self.max_value = self.dataset.wind_speed.max().item()
@@ -30,7 +33,11 @@ class WeatherData(Dataset):
         self.mean_value = self.dataset.wind_speed.mean().item()
         self.std_value = self.dataset.wind_speed.std().item()
 
-        self.land_sea_mask = np.load('C:/Users/23603526/Documents/GitHub/WeatherForecasting/data/land_sea_mask.npy')
+        if lightning:
+            self.land_sea_mask = np.load('/teamspace/studios/this_studio/WeatherForecasting/data/land_sea_mask.npy')
+        else:
+            self.land_sea_mask = np.load('C:/Users/23603526/Documents/GitHub/WeatherForecasting/data/land_sea_mask.npy')
+        
 
         self.use_forcings = use_forcings
 
@@ -65,7 +72,7 @@ class WeatherData(Dataset):
         return max(0, num_windows)  
 
 
-    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         M = torch.tensor(self.land_sea_mask).float()
 
         if self.data_split == 'train':
@@ -98,7 +105,13 @@ class WeatherData(Dataset):
 
     def split_data(self, test_size: float = 0.1, val_size: float = 0.2, random_state: int = 42) -> None:
         
-        data = self.dataset.wind_speed.values.squeeze()
+        if self.only_wspd:
+            data = self.dataset.wind_speed.values.squeeze()
+
+        else:
+            base = self.dataset.to_array(dim="variable")
+            base = base.transpose("time", "latitude", "longitude", "variable", "pressure_level")
+            data = base.values.squeeze()
         forcings = np.stack([self.dataset.time.dt.hour.values, self.dataset.time.dt.month.values], axis=-1)
         time_values = self.dataset.time.values
 
