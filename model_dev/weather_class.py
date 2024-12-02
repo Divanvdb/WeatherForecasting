@@ -20,18 +20,33 @@ from typing import Tuple
 class WeatherData(Dataset):
     def __init__(self, dataset: xr.Dataset, window_size: int = 24, steps: int = 3, 
                         auto: bool = True, coarsen: int = 1, use_forcings: bool = True, 
-                        data_split: str = 'train', lightning: bool = False, only_wspd: bool = False) -> None:
+                        data_split: str = 'train', lightning: bool = False, variable: str = 'wdpd') -> None:
         
         self.dataset = dataset
         self.window_size = window_size
         self.steps = steps
-        self.only_wspd = only_wspd
+        self.variable = variable
 
-        self.min_value = self.dataset.wind_speed.min().item()
-        self.max_value = self.dataset.wind_speed.max().item()
+        if self.variable == 'wspd':
+            self.min_value = self.dataset.wind_speed.min().item()
+            self.max_value = self.dataset.wind_speed.max().item()
 
-        self.mean_value = self.dataset.wind_speed.mean().item()
-        self.std_value = self.dataset.wind_speed.std().item()
+            self.mean_value = self.dataset.wind_speed.mean().item()
+            self.std_value = self.dataset.wind_speed.std().item()
+
+        elif self.variable == 'temp':
+            self.min_value = self.dataset.t.min().item()
+            self.max_value = self.dataset.t.max().item()
+
+            self.mean_value = self.dataset.t.mean().item()
+            self.std_value = self.dataset.t.std().item()
+
+        elif self.variable == 'all':
+            self.min_value = self.dataset.min().item()
+            self.max_value = self.dataset.max().item()
+
+            self.mean_value = self.dataset.mean().item()
+            self.std_value = self.dataset.std().item()
 
         if lightning:
             self.land_sea_mask = np.load('/teamspace/studios/this_studio/WeatherForecasting/data/land_sea_mask.npy')
@@ -48,8 +63,7 @@ class WeatherData(Dataset):
         self.data_split = data_split
 
         if auto:
-            if coarsen > 1:
-                self.subset_data(coarsen)
+            self.subset_data(coarsen)
                 
             self.split_data()
             self.normalize_data()
@@ -95,19 +109,20 @@ class WeatherData(Dataset):
 
 
     def subset_data(self, coarsen: int = 1) -> None:
-
-        if coarsen > 1:
-            lat_slice = slice(1, 33, coarsen)
-            lon_slice = slice(3, 67, coarsen)
+        lat_slice = slice(1, 49, coarsen)
+        lon_slice = slice(2, 66, coarsen)
+        self.land_sea_mask = self.land_sea_mask[1::coarsen, 2:66:coarsen]
 
         self.dataset = self.dataset.isel(latitude=lat_slice, longitude=lon_slice)
 
 
     def split_data(self, test_size: float = 0.1, val_size: float = 0.2, random_state: int = 42) -> None:
         
-        if self.only_wspd:
+        if self.variable == 'wspd':
             data = self.dataset.wind_speed.values.squeeze()
 
+        elif self.variable == 'temp':
+            data = self.dataset.t.values.squeeze()
         else:
             base = self.dataset.to_array(dim="variable")
             base = base.transpose("time", "latitude", "longitude", "variable", "pressure_level")
@@ -119,7 +134,6 @@ class WeatherData(Dataset):
         self.X_train, self.X_test, self.F_train, self.F_test, self.T_train, self.T_test = train_test_split(data, forcings, time_values, test_size=test_size, shuffle=False)
 
         self.X_train, self.X_val, self.F_train, self.F_val, self.T_train, self.T_val = train_test_split(self.X_train, self.F_train, self.T_train, test_size=val_size, shuffle=False)
-
 
     def normalize_data(self, method: str = 'min_max') -> None:
 
